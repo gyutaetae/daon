@@ -1,0 +1,7 @@
+{
+  "name": "SilverLink (실버링크)",
+  "description": "노인들을 위한 쉽고 재미있는 디지털 기기 및 앱 사용법 학습 앱 (듀오링고 스타일)",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
