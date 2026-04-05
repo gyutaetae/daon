@@ -29,6 +29,7 @@ import {
   LogOut
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
+import Groq from "groq-sdk";
 import Markdown from 'react-markdown';
 import { Lesson, LessonStep, LESSONS, UserProgress } from './types';
 
@@ -41,6 +42,10 @@ import { doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, orderBy,
 
 // --- AI Service ---
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const groq = new Groq({ 
+  apiKey: process.env.GROQ_API_KEY || "", 
+  dangerouslyAllowBrowser: true 
+});
 
 const SYSTEM_INSTRUCTION = `
 당신은 대한민국 60세 이상 어르신들을 위해 디지털 기기 사용법을 가르치는 다정하고 따뜻한 강사 '다온 선생님'입니다.
@@ -641,17 +646,47 @@ const AITutor = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) 
     setIsLoading(true);
 
     try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [...messages.map(m => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.text }] })), { role: 'user', parts: [{ text: userMsg }] }],
-        config: { systemInstruction: SYSTEM_INSTRUCTION }
-      });
+      let aiText = "";
+
+      // Prioritize Groq if available, otherwise use Gemini
+      if (process.env.GROQ_API_KEY) {
+        const chatCompletion = await groq.chat.completions.create({
+          messages: [
+            { role: "system", content: SYSTEM_INSTRUCTION },
+            ...messages.map(m => ({ role: m.role === 'user' ? 'user' : 'assistant' as const, content: m.text })),
+            { role: "user", content: userMsg }
+          ],
+          model: "llama-3.3-70b-versatile",
+        });
+        aiText = chatCompletion.choices[0]?.message?.content || "";
+      } else if (process.env.GEMINI_API_KEY) {
+        const response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: [...messages.map(m => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.text }] })), { role: 'user', parts: [{ text: userMsg }] }],
+          config: { systemInstruction: SYSTEM_INSTRUCTION }
+        });
+        aiText = response.text || "";
+      } else {
+        throw new Error("API_KEY_MISSING");
+      }
       
-      const aiText = response.text || "아이고, 제가 잘 못 들었어요. 다시 말씀해주시겠어요?";
+      if (!aiText) {
+        aiText = "아이고, 제가 잘 못 들었어요. 다시 말씀해주시겠어요?";
+      }
+      
       setMessages(prev => [...prev, { role: 'ai', text: aiText }]);
       speak(aiText);
-    } catch (error) {
-      setMessages(prev => [...prev, { role: 'ai', text: "연결이 조금 불안정하네요. 잠시 후 다시 물어봐주세요!" }]);
+    } catch (error: any) {
+      console.error("AI Tutor Error:", error);
+      let errorMsg = "연결이 조금 불안정하네요. 잠시 후 다시 물어봐주세요!";
+      
+      if (error.message === "API_KEY_MISSING") {
+        errorMsg = "다온 선생님이 답변을 드릴 수 있는 열쇠(API Key)가 없어요. Vercel 설정에서 GEMINI_API_KEY 또는 GROQ_API_KEY를 등록해 주세요!";
+      } else if (error.message?.includes("API key not valid")) {
+        errorMsg = "다온 선생님의 열쇠(API Key)가 올바르지 않아요. 관리자에게 확인을 요청해 주세요!";
+      }
+      
+      setMessages(prev => [...prev, { role: 'ai', text: errorMsg }]);
     } finally {
       setIsLoading(false);
     }
