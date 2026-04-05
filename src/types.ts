@@ -38,7 +38,7 @@ export const LESSONS: Lesson[] = [
         id: 'k1',
         type: 'info',
         content: '카카오톡 채팅방에서 글씨 쓰는 곳 옆에 있는 더하기(+) 모양을 누르세요.',
-        imageUrl: 'https://picsum.photos/seed/kakao_plus/600/400'
+        imageUrl: 'https://images.unsplash.com/photo-1490750967868-88c846e6e14f?auto=format&fit=crop&w=800&q=80' // 화사한 봄꽃 사진 (어르신들이 좋아하는 감성)
       },
       {
         id: 'k2',
@@ -61,7 +61,7 @@ export const LESSONS: Lesson[] = [
         id: 'y1',
         type: 'info',
         content: '유튜브 화면 맨 위에 있는 돋보기(🔍) 모양을 누르면 검색할 수 있어요.',
-        imageUrl: 'https://picsum.photos/seed/youtube_search/600/400'
+        imageUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=800&q=80' // 스마트폰을 보며 환하게 웃는 시니어 (성취감 자극)
       },
       {
         id: 'y2',
@@ -84,7 +84,7 @@ export const LESSONS: Lesson[] = [
         id: 't1',
         type: 'info',
         content: '어디서 출발하는지(출발역)와 어디로 가는지(도착역)를 먼저 선택해야 해요.',
-        imageUrl: 'https://picsum.photos/seed/ktx/600/400'
+        imageUrl: 'https://images.unsplash.com/photo-1474487548417-72840c29080c?auto=format&fit=crop&w=800&q=80' // 아름다운 풍경을 달리는 기차 (여행의 설렘 자극)
       },
       {
         id: 't2',
@@ -107,7 +107,7 @@ export const LESSONS: Lesson[] = [
         id: 'p1',
         type: 'info',
         content: '모르는 번호로 온 문자 속의 파란색 영어 주소(링크)는 절대 누르면 안 돼요!',
-        imageUrl: 'https://picsum.photos/seed/safety_link/600/400'
+        imageUrl: 'https://images.unsplash.com/photo-1614064641983-40055c152089?auto=format&fit=crop&w=800&q=80' // 스마트폰 화면에 뜬 자물쇠 (보안/안전의 직관적 비유)
       },
       {
         id: 'p2',

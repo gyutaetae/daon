@@ -32,7 +32,9 @@ import { GoogleGenAI } from "@google/genai";
 import Markdown from 'react-markdown';
 import { Lesson, LessonStep, LESSONS, UserProgress } from './types';
 
-// --- Firebase ---
+import { Progress } from '@/components/ui/progress';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Card, CardContent } from '@/components/ui/card';
 import { auth, db, googleProvider } from './firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
@@ -95,26 +97,25 @@ const Mascot = ({ mood = 'happy' }: { mood?: 'happy' | 'thinking' | 'celebrating
 };
 
 const Header = ({ progress, user }: { progress: UserProgress | null, user: FirebaseUser | null }) => (
-  <header className="fixed top-0 left-0 right-0 bg-white border-b-4 border-gray-200 p-4 flex justify-between items-center z-50 shadow-sm">
+  <header className="fixed top-0 left-0 right-0 bg-white border-b-2 border-gray-200 p-4 flex justify-between items-center z-50 shadow-sm">
     <div className="flex items-center gap-2">
-      <div className="bg-orange-500 p-2 rounded-xl">
-        <Sparkles className="text-white w-7 h-7" />
-      </div>
-      <h1 className="text-3xl font-black text-gray-900 tracking-tight">다온</h1>
+      <h1 className="text-3xl font-black text-[#5a4bda] tracking-tight">다온</h1>
     </div>
     {progress && (
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1 bg-red-50 px-3 py-2 rounded-2xl border-2 border-red-200">
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-1 bg-gray-100 px-3 py-1.5 rounded-full">
           <Heart className="text-red-500 w-6 h-6 fill-red-500" />
-          <span className="font-black text-red-700 text-xl">{progress.hearts}</span>
+          <span className="font-black text-gray-700 text-lg">{progress.hearts}</span>
         </div>
-        <div className="flex items-center gap-1 bg-blue-50 px-3 py-2 rounded-2xl border-2 border-blue-200">
-          <Diamond className="text-blue-500 w-6 h-6 fill-blue-500" />
-          <span className="font-black text-blue-700 text-xl">{progress.gems}</span>
+        <div className="flex items-center gap-1 bg-gray-100 px-3 py-1.5 rounded-full">
+          <div className="bg-[#ffc800] rounded-full p-1 border-2 border-[#d9a800]">
+            <Diamond className="text-white w-3 h-3 fill-white" />
+          </div>
+          <span className="font-black text-gray-700 text-lg">{progress.gems}</span>
         </div>
-        <div className="flex items-center gap-1 bg-orange-50 px-3 py-2 rounded-2xl border-2 border-orange-200">
-          <span className="text-2xl">🔥</span>
-          <span className="font-black text-orange-700 text-xl">{progress.currentStreak}</span>
+        <div className="flex items-center gap-1 bg-gray-100 px-3 py-1.5 rounded-full">
+          <span className="text-xl">🔥</span>
+          <span className="font-black text-gray-700 text-lg">{progress.currentStreak}</span>
         </div>
       </div>
     )}
@@ -150,84 +151,99 @@ const DailyRewardModal = ({ onClaim, streak, gems }: { onClaim: () => void, stre
 const LessonPath = ({ onSelectLesson, completedLessons }: { onSelectLesson: (l: Lesson) => void, completedLessons: string[] }) => {
   const getIcon = (iconName: string) => {
     switch (iconName) {
-      case 'Image': return <ImageIcon className="w-10 h-10" />;
-      case 'Youtube': return <PlayCircle className="w-10 h-10" />;
-      case 'Train': return <Train className="w-10 h-10" />;
-      case 'ShieldAlert': return <ShieldAlert className="w-10 h-10" />;
-      default: return <Smartphone className="w-10 h-10" />;
+      case 'Image': return <ImageIcon className="w-8 h-8" />;
+      case 'Youtube': return <PlayCircle className="w-8 h-8" />;
+      case 'Train': return <Train className="w-8 h-8" />;
+      case 'ShieldAlert': return <ShieldAlert className="w-8 h-8" />;
+      default: return <Smartphone className="w-8 h-8" />;
     }
   };
 
+  const formatTitle = (title: string) => {
+    const parts = title.split(' ');
+    if (parts.length > 1) {
+      return `${parts[0]}\n${parts.slice(1).join(' ')}`;
+    }
+    return title;
+  };
+
   return (
-    <div className="pt-28 pb-40 flex flex-col items-center gap-16 max-w-md mx-auto px-6">
-      <div className="w-full bg-orange-100 border-4 border-orange-300 rounded-3xl p-8 mb-4 relative overflow-hidden shadow-sm">
-        <div className="absolute -right-4 -bottom-4 opacity-20">
-          <Sparkles className="w-40 h-40" />
+    <div className="pt-28 pb-40 flex flex-col items-center max-w-md mx-auto px-4 relative">
+      {/* Background Decorations */}
+      <div className="absolute top-60 left-0 text-6xl opacity-80 pointer-events-none">🌳</div>
+      <div className="absolute top-96 right-0 text-5xl opacity-80 pointer-events-none">🌲</div>
+      <div className="absolute bottom-40 left-10 text-4xl opacity-80 pointer-events-none">🌿</div>
+
+      {/* Banner */}
+      <div className="w-full bg-[#dcf2fa] rounded-2xl mb-12 relative overflow-hidden shadow-sm border-b-[12px] border-[#a5d6a7]">
+        <div className="flex items-center gap-4 p-6 relative z-10">
+          <div className="text-7xl">🐶</div>
+          <div>
+            <h2 className="text-2xl font-black text-gray-900 mb-1">1단계: 필수 앱 정복!</h2>
+            <p className="text-base text-gray-700 font-bold">다온 선생님과 함께 천천히 배워요!</p>
+          </div>
         </div>
-        <h2 className="text-3xl font-black text-orange-900 mb-3">1단계: 필수 앱 정복</h2>
-        <p className="text-xl text-orange-800 font-bold">다온 선생님과 함께 천천히 배워요!</p>
       </div>
 
-      {LESSONS.map((lesson, index) => {
-        const isCompleted = completedLessons.includes(lesson.id);
-        const isNext = index === 0 || completedLessons.includes(LESSONS[index - 1].id);
-        
-        return (
-          <motion.div
-            key={lesson.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="relative"
-            style={{ marginLeft: index % 2 === 0 ? '0' : index % 4 === 1 ? '100px' : '-100px' }}
-          >
-            {/* Path Line */}
-            {index < LESSONS.length - 1 && (
-              <svg className="absolute top-20 left-1/2 w-40 h-40 -z-10" style={{ transform: index % 4 === 0 ? 'translateX(-20%)' : index % 4 === 1 ? 'translateX(-80%) scaleX(-1)' : index % 4 === 2 ? 'translateX(-80%) scaleX(-1)' : 'translateX(-20%)' }}>
-                <path d="M 20 0 Q 20 80 100 80 T 180 160" fill="transparent" stroke={isCompleted ? "#fb923c" : "#e5e7eb"} strokeWidth="20" strokeLinecap="round" strokeDasharray="0 30" />
-              </svg>
-            )}
+      {/* Path Container */}
+      <div className="relative w-full flex flex-col items-center gap-6">
+        {/* SVG Path Line */}
+        <div className="absolute top-20 bottom-20 left-0 right-0 -z-10">
+           <svg width="100%" height="100%" preserveAspectRatio="none" viewBox="0 0 100 100">
+             <path d="M 35 5 L 65 35 L 35 65 L 65 95" stroke="#cbd5e1" strokeWidth="12" fill="none" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+           </svg>
+        </div>
 
-            <motion.button
-              whileHover={isNext ? { scale: 1.05 } : {}}
-              whileTap={isNext ? { scale: 0.95 } : {}}
-              onClick={() => isNext && onSelectLesson(lesson)}
-              className={`
-                relative w-36 h-36 sm:w-40 sm:h-40 rounded-full flex items-center justify-center border-b-[12px] transition-all
-                ${isCompleted ? 'bg-orange-500 border-orange-700 text-white' : 
-                  isNext ? 'bg-purple-500 border-purple-700 text-white shadow-2xl ring-8 ring-purple-200 ring-offset-4' : 
-                  'bg-gray-200 border-gray-300 text-gray-400 cursor-not-allowed'}
-              `}
+        {LESSONS.map((lesson, index) => {
+          const isCompleted = completedLessons.includes(lesson.id);
+          const isNext = index === 0 || completedLessons.includes(LESSONS[index - 1].id);
+          
+          let bgColor = 'bg-[#e5e5e5]';
+          let borderColor = 'border-[#cccccc]';
+          let textColor = 'text-gray-500';
+          
+          if (isCompleted || isNext) {
+            if (index === 0) { bgColor = 'bg-[#7c5ff4]'; borderColor = 'border-[#5a4bda]'; textColor = 'text-white'; }
+            else if (index === 1) { bgColor = 'bg-[#70c0e8]'; borderColor = 'border-[#4a90e2]'; textColor = 'text-white'; }
+            else if (index === 2) { bgColor = 'bg-[#b5b5b5]'; borderColor = 'border-[#999999]'; textColor = 'text-white'; }
+            else { bgColor = 'bg-[#e0e0e0]'; borderColor = 'border-[#b5b5b5]'; textColor = 'text-gray-600'; }
+          }
+
+          const positionClass = index % 2 === 0 ? '-translate-x-12' : 'translate-x-12';
+
+          return (
+            <motion.div
+              key={lesson.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.1 }}
+              className={`relative ${positionClass}`}
             >
-              {getIcon(lesson.icon)}
-              
-              {/* Progress Ring for Next Lesson */}
-              {isNext && !isCompleted && (
-                <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="10" />
-                  <circle cx="50" cy="50" r="44" fill="none" stroke="#fff" strokeWidth="10" strokeDasharray="276" strokeDashoffset="276" className="animate-[dash_2s_ease-out_forwards]" />
-                </svg>
-              )}
-
-              {isCompleted && (
-                <div className="absolute -top-2 -right-2 bg-white rounded-full p-2 border-4 border-orange-500 shadow-sm">
-                  <CheckCircle2 className="text-orange-500 w-8 h-8" />
+              <motion.button
+                whileHover={isNext ? { scale: 1.05 } : {}}
+                whileTap={isNext ? { scale: 0.95 } : {}}
+                onClick={() => isNext && onSelectLesson(lesson)}
+                className={`
+                  relative w-40 h-40 rounded-full flex flex-col items-center justify-center border-b-[10px] transition-all shadow-md
+                  ${bgColor} ${borderColor} ${textColor}
+                  ${!isNext && !isCompleted ? 'opacity-80 cursor-not-allowed' : ''}
+                `}
+              >
+                <div className="mb-2 bg-white/20 p-2 rounded-full">
+                  {getIcon(lesson.icon)}
                 </div>
-              )}
-              
-              {/* Crown for completed */}
-              {isCompleted && (
-                <div className="absolute -top-10 text-4xl animate-bounce">👑</div>
-              )}
-            </motion.button>
-            <div className="absolute -bottom-14 left-1/2 -translate-x-1/2 w-64 text-center">
-              <span className={`text-2xl font-black ${isNext ? 'text-gray-900' : 'text-gray-400'}`}>
-                {lesson.title}
-              </span>
-            </div>
-          </motion.div>
-        );
-      })}
+                <span className="text-center font-black text-lg leading-tight whitespace-pre-line">
+                  {formatTitle(lesson.title)}
+                </span>
+
+                {isCompleted && (
+                  <div className="absolute -top-4 -right-2 text-4xl animate-bounce drop-shadow-md">👑</div>
+                )}
+              </motion.button>
+            </motion.div>
+          );
+        })}
+      </div>
     </div>
   );
 };
@@ -382,12 +398,8 @@ const LessonView = ({
         <button onClick={onCancel} className="p-3 hover:bg-gray-100 rounded-full">
           <XCircle className="w-10 h-10 text-gray-500" />
         </button>
-        <div className="flex-1 h-6 bg-gray-200 rounded-full overflow-hidden">
-          <motion.div 
-            className="h-full bg-green-500"
-            initial={{ width: 0 }}
-            animate={{ width: `${((currentStepIdx + 1) / lesson.steps.length) * 100}%` }}
-          />
+        <div className="flex-1">
+          <Progress value={((currentStepIdx + 1) / lesson.steps.length) * 100} className="h-6" />
         </div>
         <div className="flex items-center gap-2 text-red-500 font-black text-2xl">
           <Heart className="w-8 h-8 fill-red-500" /> {hearts}
@@ -410,9 +422,20 @@ const LessonView = ({
         </div>
 
         {step.imageUrl && (
-          <div className="w-full aspect-video rounded-3xl overflow-hidden border-4 border-gray-200 mb-10 shadow-md">
-            <img src={step.imageUrl} alt="Lesson" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-          </div>
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5 }}
+            className="w-full aspect-video rounded-[2rem] overflow-hidden border-8 border-white mb-10 shadow-[0_8px_30px_rgb(0,0,0,0.12)] relative group"
+          >
+            <img 
+              src={step.imageUrl} 
+              alt="Lesson" 
+              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
+              referrerPolicy="no-referrer" 
+            />
+            <div className="absolute inset-0 border-4 border-black/5 rounded-[2rem] pointer-events-none"></div>
+          </motion.div>
         )}
 
         {step.type === 'quiz' && (
@@ -480,37 +503,37 @@ const QuestsView = ({ progress }: { progress: UserProgress }) => {
       <h2 className="text-4xl font-black text-gray-900 mb-8 border-b-4 border-gray-200 pb-6">오늘의 임무</h2>
       
       <div className="space-y-6">
-        <div className="bg-white border-4 border-gray-200 rounded-3xl p-8 flex items-center gap-8 shadow-sm">
-          <div className="text-6xl">🔥</div>
-          <div className="flex-1">
-            <h3 className="text-2xl font-black text-gray-900 mb-3">출석하기</h3>
-            <div className="w-full bg-gray-200 rounded-full h-6 mb-3">
-              <div className="bg-orange-500 h-6 rounded-full w-full"></div>
+        <Card className="border-4 border-gray-200 rounded-3xl shadow-sm">
+          <CardContent className="p-8 flex items-center gap-8">
+            <div className="text-6xl">🔥</div>
+            <div className="flex-1">
+              <h3 className="text-2xl font-black text-gray-900 mb-3">출석하기</h3>
+              <Progress value={100} className="h-6 mb-3 bg-gray-200" />
+              <div className="flex justify-between text-gray-600 font-bold text-xl">
+                <span>1 / 1</span>
+                <span className="text-orange-600 font-black">완료!</span>
+              </div>
             </div>
-            <div className="flex justify-between text-gray-600 font-bold text-xl">
-              <span>1 / 1</span>
-              <span className="text-orange-600 font-black">완료!</span>
-            </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        <div className="bg-white border-4 border-gray-200 rounded-3xl p-8 flex items-center gap-8 shadow-sm">
-          <div className="text-6xl">📱</div>
-          <div className="flex-1">
-            <h3 className="text-2xl font-black text-gray-900 mb-3">학습 1회 완료하기</h3>
-            <div className="w-full bg-gray-200 rounded-full h-6 mb-3">
-              <div className="bg-blue-500 h-6 rounded-full" style={{ width: progress.completedLessons.length > 0 ? '100%' : '0%' }}></div>
+        <Card className="border-4 border-gray-200 rounded-3xl shadow-sm">
+          <CardContent className="p-8 flex items-center gap-8">
+            <div className="text-6xl">📱</div>
+            <div className="flex-1">
+              <h3 className="text-2xl font-black text-gray-900 mb-3">학습 1회 완료하기</h3>
+              <Progress value={progress.completedLessons.length > 0 ? 100 : 0} className="h-6 mb-3 bg-gray-200" />
+              <div className="flex justify-between text-gray-600 font-bold text-xl">
+                <span>{progress.completedLessons.length > 0 ? '1' : '0'} / 1</span>
+                {progress.completedLessons.length > 0 ? (
+                  <span className="text-blue-600 font-black">완료!</span>
+                ) : (
+                  <span className="text-blue-600 font-black flex items-center gap-2"><Diamond className="w-6 h-6 fill-blue-600"/> 10</span>
+                )}
+              </div>
             </div>
-            <div className="flex justify-between text-gray-600 font-bold text-xl">
-              <span>{progress.completedLessons.length > 0 ? '1' : '0'} / 1</span>
-              {progress.completedLessons.length > 0 ? (
-                <span className="text-blue-600 font-black">완료!</span>
-              ) : (
-                <span className="text-blue-600 font-black flex items-center gap-2"><Diamond className="w-6 h-6 fill-blue-600"/> 10</span>
-              )}
-            </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
@@ -574,9 +597,13 @@ const LeaderboardView = ({ progress, user }: { progress: UserProgress, user: Fir
               >
                 {index + 1}
               </div>
-              <div className="w-16 h-16 bg-gray-100 rounded-full overflow-hidden flex items-center justify-center text-4xl border-2 border-gray-200">
-                {u.avatar.startsWith('http') ? <img src={u.avatar} alt="avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : u.avatar}
-              </div>
+              <Avatar className="w-16 h-16 border-2 border-gray-200">
+                {u.avatar.startsWith('http') ? (
+                  <AvatarImage src={u.avatar} alt="avatar" />
+                ) : (
+                  <AvatarFallback className="text-4xl bg-gray-100">{u.avatar}</AvatarFallback>
+                )}
+              </Avatar>
               <div className="flex-1">
                 <div className={`text-2xl font-black ${u.isMe ? 'text-orange-800' : 'text-gray-900'}`}>
                   {u.name}
@@ -700,6 +727,15 @@ const AITutor = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) 
   );
 };
 
+const defaultProgress: UserProgress = {
+  completedLessons: [],
+  currentStreak: 0,
+  xp: 0,
+  hearts: 5,
+  gems: 0,
+  lastActiveDate: ''
+};
+
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
@@ -762,8 +798,15 @@ export default function App() {
   const handleLogin = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login failed", error);
+      if (error.code === 'auth/unauthorized-domain') {
+        alert("현재 도메인이 Firebase에 등록되지 않았습니다. Firebase 콘솔(Authentication -> Settings -> Authorized domains)에 현재 Vercel 도메인을 추가해주세요.");
+      } else if (error.code === 'auth/popup-blocked') {
+        alert("팝업이 차단되었습니다. 브라우저 설정에서 팝업 차단을 해제해주세요.");
+      } else {
+        alert("로그인 중 오류가 발생했습니다: " + error.message);
+      }
     }
   };
 
@@ -772,20 +815,24 @@ export default function App() {
   };
 
   const updateProgress = async (updates: Partial<UserProgress>) => {
-    if (!user || !progress) return;
-    const userRef = doc(db, 'users', user.uid);
-    await updateDoc(userRef, updates);
+    if (user && progress) {
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, updates);
+    } else {
+      // Update local state for guests
+      setProgress(prev => prev ? { ...prev, ...updates } : { ...defaultProgress, ...updates });
+    }
   };
 
   const handleClaimDailyReward = () => {
-    if (!progress) return;
+    const current = progress || defaultProgress;
     const today = getTodayString();
     
-    const newStreak = progress.currentStreak + 1; 
+    const newStreak = current.currentStreak + 1; 
     updateProgress({
       currentStreak: newStreak,
-      gems: progress.gems + 20,
-      xp: progress.xp + 10,
+      gems: current.gems + 20,
+      xp: current.xp + 10,
       lastActiveDate: today
     });
     
@@ -794,60 +841,41 @@ export default function App() {
   };
 
   const handleLessonComplete = (xpEarned: number, gemsEarned: number) => {
-    if (!selectedLesson || !progress) return;
+    if (!selectedLesson) return;
+    const current = progress || defaultProgress;
     
-    const isFirstTime = !progress.completedLessons.includes(selectedLesson.id);
+    const isFirstTime = !current.completedLessons.includes(selectedLesson.id);
     updateProgress({
-      completedLessons: isFirstTime ? [...progress.completedLessons, selectedLesson.id] : progress.completedLessons,
-      xp: progress.xp + xpEarned,
-      gems: progress.gems + gemsEarned,
+      completedLessons: isFirstTime ? [...current.completedLessons, selectedLesson.id] : current.completedLessons,
+      xp: current.xp + xpEarned,
+      gems: current.gems + gemsEarned,
     });
     setSelectedLesson(null);
   };
 
   const handleRefillHearts = () => {
-    if (!progress) return;
-    if (progress.gems >= 50) {
-      updateProgress({ hearts: 5, gems: progress.gems - 50 });
+    const current = progress || defaultProgress;
+    if (current.gems >= 50) {
+      updateProgress({ hearts: 5, gems: current.gems - 50 });
     } else {
       alert("보석이 부족해요!");
     }
   };
 
+  const currentProgress = progress || defaultProgress;
+
   if (loadingAuth) {
     return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-3xl font-black text-orange-500 animate-pulse">다온 불러오는 중...</div></div>;
   }
 
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-orange-50 flex flex-col items-center justify-center p-6">
-        <Mascot />
-        <h1 className="text-5xl font-black text-orange-600 mb-4 mt-6">다온</h1>
-        <p className="text-2xl text-gray-700 font-bold mb-12 text-center">어르신을 위한<br/>가장 쉬운 디지털 교실</p>
-        
-        <button 
-          onClick={handleLogin}
-          className="w-full max-w-sm py-6 text-3xl font-black rounded-2xl border-b-8 bg-white border-gray-300 text-gray-800 flex items-center justify-center gap-4 active:translate-y-2 shadow-sm"
-        >
-          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-8 h-8" />
-          구글로 시작하기
-        </button>
-      </div>
-    );
-  }
-
-  if (!progress) {
-    return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-3xl font-black text-orange-500 animate-pulse">정보 불러오는 중...</div></div>;
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 selection:bg-orange-200">
-      <Header progress={progress} user={user} />
+    <div className="min-h-screen bg-[#f4efe6] font-sans text-gray-900 selection:bg-orange-200">
+      <Header progress={currentProgress} user={user} />
       
-      {showDailyReward && (
+      {showDailyReward && user && (
         <DailyRewardModal 
           onClaim={handleClaimDailyReward} 
-          streak={progress.currentStreak + 1} 
+          streak={currentProgress.currentStreak + 1} 
           gems={20} 
         />
       )}
@@ -855,7 +883,7 @@ export default function App() {
       <main className="max-w-4xl mx-auto">
         {view === 'home' && !selectedLesson && (
           <LessonPath 
-            completedLessons={progress.completedLessons}
+            completedLessons={currentProgress.completedLessons}
             onSelectLesson={(l) => setSelectedLesson(l)} 
           />
         )}
@@ -863,104 +891,126 @@ export default function App() {
         {selectedLesson && (
           <LessonView 
             lesson={selectedLesson} 
-            hearts={progress.hearts}
+            hearts={currentProgress.hearts}
             onComplete={handleLessonComplete}
-            onWrongAnswer={() => updateProgress({ hearts: Math.max(0, progress.hearts - 1) })}
+            onWrongAnswer={() => updateProgress({ hearts: Math.max(0, currentProgress.hearts - 1) })}
             onCancel={() => setSelectedLesson(null)}
             onRefillHearts={handleRefillHearts}
           />
         )}
 
         {view === 'quests' && !selectedLesson && (
-          <QuestsView progress={progress} />
+          <QuestsView progress={currentProgress} />
         )}
 
         {view === 'leaderboard' && !selectedLesson && (
-          <LeaderboardView progress={progress} user={user} />
+          <LeaderboardView progress={currentProgress} user={user} />
         )}
 
         {view === 'profile' && !selectedLesson && (
-          <div className="pt-28 px-6 flex flex-col items-center">
-             <div className="w-40 h-40 bg-orange-100 rounded-full flex items-center justify-center border-8 border-orange-400 text-7xl mb-6 shadow-md overflow-hidden">
-               {user.photoURL ? <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : '👴'}
-             </div>
-             <h2 className="text-4xl font-black text-gray-900 mb-2">{user.displayName || '회원님'}</h2>
-             <p className="text-xl text-gray-500 font-bold mb-10">{user.email}</p>
+          <div className="pt-28 px-6 flex flex-col items-center pb-40">
+            {!user ? (
+              <div className="flex flex-col items-center text-center w-full max-w-md">
+                <Mascot />
+                <h1 className="text-5xl font-black text-orange-600 mb-4 mt-6">다온</h1>
+                <p className="text-2xl text-gray-700 font-bold mb-12">로그인하고 내 기록을<br/>안전하게 보관하세요!</p>
+                
+                <button 
+                  onClick={handleLogin}
+                  className="w-full py-6 text-3xl font-black rounded-2xl border-b-8 bg-white border-gray-300 text-gray-800 flex items-center justify-center gap-4 active:translate-y-2 shadow-sm"
+                >
+                  <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-8 h-8" />
+                  구글로 시작하기
+                </button>
+                <p className="mt-6 text-gray-500 font-bold text-lg">
+                  * 팝업이 뜨지 않는다면 브라우저 팝업 차단을 해제해주세요.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="w-40 h-40 bg-orange-100 rounded-full flex items-center justify-center border-8 border-orange-400 text-7xl mb-6 shadow-md overflow-hidden">
+                  {user.photoURL ? <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : '👴'}
+                </div>
+                <h2 className="text-4xl font-black text-gray-900 mb-2">{user.displayName || '회원님'}</h2>
+                <p className="text-xl text-gray-500 font-bold mb-10">{user.email}</p>
 
-             <div className="grid grid-cols-2 gap-6 w-full max-w-2xl mb-12">
-               <div className="bg-blue-50 p-8 rounded-[2rem] border-4 border-blue-200 text-center shadow-sm">
-                 <Trophy className="w-12 h-12 text-blue-600 mx-auto mb-3" />
-                 <div className="text-4xl font-black text-blue-900 mb-1">{progress.xp}</div>
-                 <div className="text-blue-700 font-bold text-xl">경험치 (XP)</div>
-               </div>
-               <div className="bg-red-50 p-8 rounded-[2rem] border-4 border-red-200 text-center shadow-sm">
-                 <div className="text-5xl mb-3">🔥</div>
-                 <div className="text-4xl font-black text-red-900 mb-1">{progress.currentStreak}일</div>
-                 <div className="text-red-700 font-bold text-xl">연속 학습</div>
-               </div>
-               <div className="bg-pink-50 p-8 rounded-[2rem] border-4 border-pink-200 text-center shadow-sm">
-                 <Heart className="w-12 h-12 text-pink-500 fill-pink-500 mx-auto mb-3" />
-                 <div className="text-4xl font-black text-pink-900 mb-1">{progress.hearts}개</div>
-                 <div className="text-pink-700 font-bold text-xl">남은 하트</div>
-               </div>
-               <div className="bg-purple-50 p-8 rounded-[2rem] border-4 border-purple-200 text-center shadow-sm">
-                 <Diamond className="w-12 h-12 text-purple-500 fill-purple-500 mx-auto mb-3" />
-                 <div className="text-4xl font-black text-purple-900 mb-1">{progress.gems}개</div>
-                 <div className="text-purple-700 font-bold text-xl">보유 보석</div>
-               </div>
-             </div>
+                <div className="grid grid-cols-2 gap-6 w-full max-w-2xl mb-12">
+                  <div className="bg-blue-50 p-8 rounded-[2rem] border-4 border-blue-200 text-center shadow-sm">
+                    <Trophy className="w-12 h-12 text-blue-600 mx-auto mb-3" />
+                    <div className="text-4xl font-black text-blue-900 mb-1">{currentProgress.xp}</div>
+                    <div className="text-blue-700 font-bold text-xl">경험치 (XP)</div>
+                  </div>
+                  <div className="bg-red-50 p-8 rounded-[2rem] border-4 border-red-200 text-center shadow-sm">
+                    <div className="text-5xl mb-3">🔥</div>
+                    <div className="text-4xl font-black text-red-900 mb-1">{currentProgress.currentStreak}일</div>
+                    <div className="text-red-700 font-bold text-xl">연속 학습</div>
+                  </div>
+                  <div className="bg-pink-50 p-8 rounded-[2rem] border-4 border-pink-200 text-center shadow-sm">
+                    <Heart className="w-12 h-12 text-pink-500 fill-pink-500 mx-auto mb-3" />
+                    <div className="text-4xl font-black text-pink-900 mb-1">{currentProgress.hearts}개</div>
+                    <div className="text-pink-700 font-bold text-xl">남은 하트</div>
+                  </div>
+                  <div className="bg-purple-50 p-8 rounded-[2rem] border-4 border-purple-200 text-center shadow-sm">
+                    <Diamond className="w-12 h-12 text-purple-500 fill-purple-500 mx-auto mb-3" />
+                    <div className="text-4xl font-black text-purple-900 mb-1">{currentProgress.gems}개</div>
+                    <div className="text-purple-700 font-bold text-xl">보유 보석</div>
+                  </div>
+                </div>
 
-             <button 
-                onClick={handleLogout}
-                className="flex items-center gap-3 text-2xl font-bold text-gray-500 hover:text-gray-800 bg-gray-200 px-8 py-4 rounded-2xl"
-             >
-               <LogOut className="w-8 h-8" /> 로그아웃
-             </button>
+                <button 
+                    onClick={handleLogout}
+                    className="flex items-center gap-3 text-2xl font-bold text-gray-500 hover:text-gray-800 bg-gray-200 px-8 py-4 rounded-2xl"
+                >
+                  <LogOut className="w-8 h-8" /> 로그아웃
+                </button>
+              </>
+            )}
           </div>
         )}
       </main>
 
       {/* Bottom Navigation */}
       {!selectedLesson && (
-        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t-4 border-gray-200 p-3 sm:p-5 flex justify-around items-center z-50 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)]">
+        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-gray-200 px-2 pb-safe pt-2 flex justify-around items-center z-50">
           <button 
             onClick={() => setView('home')}
-            className={`flex flex-col items-center gap-2 p-3 rounded-2xl transition-colors ${view === 'home' ? 'text-orange-600 bg-orange-50' : 'text-gray-400 hover:bg-gray-50'}`}
+            className={`flex flex-col items-center gap-1 p-2 transition-colors ${view === 'home' ? 'text-[#5a4bda]' : 'text-gray-400 hover:text-gray-600'}`}
           >
-            <Home className="w-10 h-10" />
-            <span className="text-sm font-black hidden sm:block">학습</span>
+            <Home className="w-8 h-8" />
+            <span className="text-xs font-black">학습</span>
           </button>
 
           <button 
             onClick={() => setView('quests')}
-            className={`flex flex-col items-center gap-2 p-3 rounded-2xl transition-colors ${view === 'quests' ? 'text-blue-600 bg-blue-50' : 'text-gray-400 hover:bg-gray-50'}`}
+            className={`flex flex-col items-center gap-1 p-2 transition-colors ${view === 'quests' ? 'text-[#5a4bda]' : 'text-gray-400 hover:text-gray-600'}`}
           >
-            <Target className="w-10 h-10" />
-            <span className="text-sm font-black hidden sm:block">임무</span>
+            <Target className="w-8 h-8" />
+            <span className="text-xs font-black">임무</span>
           </button>
           
-          <button 
-            onClick={() => setIsAIHelpOpen(true)}
-            className="relative -top-8 bg-orange-500 p-5 rounded-full border-b-8 border-orange-700 shadow-2xl text-white active:translate-y-2 transition-transform"
-          >
-            <Sparkles className="w-10 h-10" />
-            <div className="absolute -top-3 -right-3 bg-yellow-400 text-orange-900 text-xs font-black px-3 py-1.5 rounded-full border-4 border-white shadow-sm">질문!</div>
-          </button>
+          <div className="relative -top-6">
+            <button 
+              onClick={() => setIsAIHelpOpen(true)}
+              className="bg-[#ff9600] rounded-full border-b-[6px] border-[#cc7800] shadow-lg text-white active:translate-y-1 transition-transform flex flex-col items-center justify-center w-[72px] h-[72px]"
+            >
+              <span className="font-black text-lg">질문!</span>
+            </button>
+          </div>
 
           <button 
             onClick={() => setView('leaderboard')}
-            className={`flex flex-col items-center gap-2 p-3 rounded-2xl transition-colors ${view === 'leaderboard' ? 'text-yellow-600 bg-yellow-50' : 'text-gray-400 hover:bg-gray-50'}`}
+            className={`flex flex-col items-center gap-1 p-2 transition-colors ${view === 'leaderboard' ? 'text-[#5a4bda]' : 'text-gray-400 hover:text-gray-600'}`}
           >
-            <Medal className="w-10 h-10" />
-            <span className="text-sm font-black hidden sm:block">순위</span>
+            <Trophy className="w-8 h-8" />
+            <span className="text-xs font-black">순위</span>
           </button>
 
           <button 
             onClick={() => setView('profile')}
-            className={`flex flex-col items-center gap-2 p-3 rounded-2xl transition-colors ${view === 'profile' ? 'text-orange-600 bg-orange-50' : 'text-gray-400 hover:bg-gray-50'}`}
+            className={`flex flex-col items-center gap-1 p-2 transition-colors ${view === 'profile' ? 'text-[#5a4bda]' : 'text-gray-400 hover:text-gray-600'}`}
           >
-            <User className="w-10 h-10" />
-            <span className="text-sm font-black hidden sm:block">내 정보</span>
+            <User className="w-8 h-8" />
+            <span className="text-xs font-black">내 정보</span>
           </button>
         </nav>
       )}
