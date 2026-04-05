@@ -1,6 +1,6 @@
 {
-  "name": "SilverLink (실버링크)",
-  "description": "노인들을 위한 쉽고 재미있는 디지털 기기 및 앱 사용법 학습 앱 (듀오링고 스타일)",
+  "name": "다온 (Daon)",
+  "description": "60세 이상 시니어를 위한 맞춤형 디지털 교육 플랫폼",
   "requestFramePermissions": [
     "microphone"
   ]

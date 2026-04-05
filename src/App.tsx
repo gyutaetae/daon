@@ -22,36 +22,49 @@ import {
   Diamond,
   Target,
   Medal,
-  PlayCircle
+  PlayCircle,
+  Image as ImageIcon,
+  Train,
+  Gift,
+  LogOut
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import Markdown from 'react-markdown';
 import { Lesson, LessonStep, LESSONS, UserProgress } from './types';
 
+// --- Firebase ---
+import { auth, db, googleProvider } from './firebase';
+import { signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+
 // --- AI Service ---
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 const SYSTEM_INSTRUCTION = `
-당신은 70대 어르신들을 위한 다정한 디지털 도우미 '은빛 부엉이'입니다.
-어르신들이 스마트폰, 키오스크, 카카오톡 등 디지털 기기 사용법을 물어볼 때, 
-다음 원칙을 지켜 답변해주세요:
+당신은 대한민국 60세 이상 어르신들을 위해 디지털 기기 사용법을 가르치는 다정하고 따뜻한 강사 '다온 선생님'입니다.
+어르신들과 정서적으로 깊이 교류하며, 다음 원칙을 지켜 답변해주세요:
 1. 아주 쉬운 단어를 사용하세요 (예: '아이콘' 대신 '그림 버튼', '탭' 대신 '살짝 누르기').
-2. 한 번에 하나씩만 설명하세요.
-3. 따뜻하고 격려하는 말투를 사용하세요 (예: "천천히 하셔도 괜찮아요!", "정말 잘하고 계세요!").
-4. 비유를 활용하세요 (예: "카카오톡은 종이 편지 대신 핸드폰으로 보내는 편지예요").
-5. 답변은 3문장 이내로 짧게 하세요.
+2. 한 번에 하나씩만 천천히 설명하세요.
+3. 따뜻하고 격려하는 말투를 사용하세요 (예: "우리 어르신 천천히 하셔도 괜찮아요!", "아이고, 정말 잘하고 계세요!").
+4. 실생활 비유를 활용하세요 (예: "카카오톡은 엽서 대신 핸드폰으로 보내는 편지예요").
+5. 답변은 3문장 이내로 짧고 굵게 하세요.
 `;
 
 // --- Helpers ---
 const speak = (text: string) => {
   if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel(); // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'ko-KR';
-    utterance.rate = 0.85; // Slightly slower for seniors
+    utterance.rate = 0.8; // Slower for seniors
     utterance.pitch = 1;
     window.speechSynthesis.speak(utterance);
   }
+};
+
+const getTodayString = () => {
+  const today = new Date();
+  return `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
 };
 
 // --- Components ---
@@ -59,72 +72,100 @@ const speak = (text: string) => {
 const Mascot = ({ mood = 'happy' }: { mood?: 'happy' | 'thinking' | 'celebrating' | 'sad' | 'shocked' }) => {
   const getEmoji = () => {
     switch (mood) {
-      case 'thinking': return '🧐';
-      case 'celebrating': return '🥳';
+      case 'thinking': return '🤔';
+      case 'celebrating': return '🎉';
       case 'sad': return '😥';
       case 'shocked': return '😱';
-      default: return '🦉';
+      default: return '👩‍🏫'; // Teacher Daon
     }
   };
 
   return (
     <motion.div 
       animate={{ y: [0, -10, 0] }}
-      transition={{ repeat: Infinity, duration: 2 }}
-      className="text-6xl mb-4 flex flex-col items-center"
+      transition={{ repeat: Infinity, duration: 2.5 }}
+      className="text-7xl mb-4 flex flex-col items-center"
     >
       <div className="bg-orange-100 p-6 rounded-full border-4 border-orange-400 shadow-lg">
         {getEmoji()}
       </div>
-      <span className="text-sm font-bold mt-2 text-orange-800 bg-orange-200 px-3 py-1 rounded-full">은빛 부엉이</span>
+      <span className="text-lg font-black mt-3 text-orange-900 bg-orange-200 px-4 py-1 rounded-full shadow-sm">다온 선생님</span>
     </motion.div>
   );
 };
 
-const Header = ({ progress }: { progress: UserProgress }) => (
-  <header className="fixed top-0 left-0 right-0 bg-white border-b-4 border-gray-100 p-4 flex justify-between items-center z-50">
+const Header = ({ progress, user }: { progress: UserProgress | null, user: FirebaseUser | null }) => (
+  <header className="fixed top-0 left-0 right-0 bg-white border-b-4 border-gray-200 p-4 flex justify-between items-center z-50 shadow-sm">
     <div className="flex items-center gap-2">
-      <div className="bg-orange-500 p-2 rounded-lg">
-        <Smartphone className="text-white w-6 h-6" />
+      <div className="bg-orange-500 p-2 rounded-xl">
+        <Sparkles className="text-white w-7 h-7" />
       </div>
-      <h1 className="text-2xl font-black text-gray-800 tracking-tight hidden sm:block">실버링크</h1>
+      <h1 className="text-3xl font-black text-gray-900 tracking-tight">다온</h1>
     </div>
-    <div className="flex items-center gap-3">
-      <div className="flex items-center gap-1 bg-red-50 px-3 py-1 rounded-full border-2 border-red-200">
-        <Heart className="text-red-500 w-5 h-5 fill-red-500" />
-        <span className="font-bold text-red-700">{progress.hearts}</span>
+    {progress && (
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1 bg-red-50 px-3 py-2 rounded-2xl border-2 border-red-200">
+          <Heart className="text-red-500 w-6 h-6 fill-red-500" />
+          <span className="font-black text-red-700 text-xl">{progress.hearts}</span>
+        </div>
+        <div className="flex items-center gap-1 bg-blue-50 px-3 py-2 rounded-2xl border-2 border-blue-200">
+          <Diamond className="text-blue-500 w-6 h-6 fill-blue-500" />
+          <span className="font-black text-blue-700 text-xl">{progress.gems}</span>
+        </div>
+        <div className="flex items-center gap-1 bg-orange-50 px-3 py-2 rounded-2xl border-2 border-orange-200">
+          <span className="text-2xl">🔥</span>
+          <span className="font-black text-orange-700 text-xl">{progress.currentStreak}</span>
+        </div>
       </div>
-      <div className="flex items-center gap-1 bg-blue-50 px-3 py-1 rounded-full border-2 border-blue-200">
-        <Diamond className="text-blue-500 w-5 h-5 fill-blue-500" />
-        <span className="font-bold text-blue-700">{progress.gems}</span>
-      </div>
-      <div className="flex items-center gap-1 bg-orange-50 px-3 py-1 rounded-full border-2 border-orange-200">
-        <span className="text-lg">🔥</span>
-        <span className="font-bold text-orange-700">{progress.currentStreak}</span>
-      </div>
-    </div>
+    )}
   </header>
 );
+
+const DailyRewardModal = ({ onClaim, streak, gems }: { onClaim: () => void, streak: number, gems: number }) => {
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-6">
+      <motion.div 
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="bg-white rounded-[2rem] p-8 max-w-md w-full text-center shadow-2xl border-8 border-orange-400"
+      >
+        <div className="text-8xl mb-6 animate-bounce">🎁</div>
+        <h2 className="text-4xl font-black text-gray-900 mb-4">출석 보상 도착!</h2>
+        <p className="text-2xl text-gray-700 font-bold mb-8 leading-relaxed">
+          오늘도 오셨군요!<br/>
+          <span className="text-orange-600">{streak}일 연속</span> 출석입니다.<br/>
+          보석 <span className="text-blue-600">{gems}개</span>를 받으세요!
+        </p>
+        <button 
+          onClick={onClaim}
+          className="w-full py-6 text-3xl font-black rounded-2xl border-b-8 bg-orange-500 border-orange-700 text-white active:translate-y-2 transition-transform"
+        >
+          보상 받기
+        </button>
+      </motion.div>
+    </div>
+  );
+};
 
 const LessonPath = ({ onSelectLesson, completedLessons }: { onSelectLesson: (l: Lesson) => void, completedLessons: string[] }) => {
   const getIcon = (iconName: string) => {
     switch (iconName) {
-      case 'Smartphone': return <Smartphone className="w-8 h-8" />;
-      case 'MessageCircle': return <MessageCircle className="w-8 h-8" />;
-      case 'ShieldAlert': return <ShieldAlert className="w-8 h-8" />;
-      case 'Youtube': return <PlayCircle className="w-8 h-8" />;
-      default: return <Smartphone className="w-8 h-8" />;
+      case 'Image': return <ImageIcon className="w-10 h-10" />;
+      case 'Youtube': return <PlayCircle className="w-10 h-10" />;
+      case 'Train': return <Train className="w-10 h-10" />;
+      case 'ShieldAlert': return <ShieldAlert className="w-10 h-10" />;
+      default: return <Smartphone className="w-10 h-10" />;
     }
   };
 
   return (
-    <div className="pt-24 pb-32 flex flex-col items-center gap-12 max-w-md mx-auto px-6">
-      <div className="w-full bg-orange-100 border-4 border-orange-300 rounded-3xl p-6 mb-4 relative overflow-hidden">
+    <div className="pt-28 pb-40 flex flex-col items-center gap-16 max-w-md mx-auto px-6">
+      <div className="w-full bg-orange-100 border-4 border-orange-300 rounded-3xl p-8 mb-4 relative overflow-hidden shadow-sm">
         <div className="absolute -right-4 -bottom-4 opacity-20">
-          <Smartphone className="w-32 h-32" />
+          <Sparkles className="w-40 h-40" />
         </div>
-        <h2 className="text-2xl font-black text-orange-900 mb-2">1단계: 스마트폰 첫걸음</h2>
-        <p className="text-orange-800 font-bold">기초부터 차근차근 배워보아요!</p>
+        <h2 className="text-3xl font-black text-orange-900 mb-3">1단계: 필수 앱 정복</h2>
+        <p className="text-xl text-orange-800 font-bold">다온 선생님과 함께 천천히 배워요!</p>
       </div>
 
       {LESSONS.map((lesson, index) => {
@@ -138,12 +179,12 @@ const LessonPath = ({ onSelectLesson, completedLessons }: { onSelectLesson: (l: 
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
             className="relative"
-            style={{ marginLeft: index % 2 === 0 ? '0' : index % 4 === 1 ? '80px' : '-80px' }}
+            style={{ marginLeft: index % 2 === 0 ? '0' : index % 4 === 1 ? '100px' : '-100px' }}
           >
             {/* Path Line */}
             {index < LESSONS.length - 1 && (
-              <svg className="absolute top-16 left-1/2 w-32 h-32 -z-10" style={{ transform: index % 4 === 0 ? 'translateX(-20%)' : index % 4 === 1 ? 'translateX(-80%) scaleX(-1)' : index % 4 === 2 ? 'translateX(-80%) scaleX(-1)' : 'translateX(-20%)' }}>
-                <path d="M 20 0 Q 20 60 80 60 T 140 120" fill="transparent" stroke={isCompleted ? "#fb923c" : "#e5e7eb"} strokeWidth="16" strokeLinecap="round" strokeDasharray="0 24" />
+              <svg className="absolute top-20 left-1/2 w-40 h-40 -z-10" style={{ transform: index % 4 === 0 ? 'translateX(-20%)' : index % 4 === 1 ? 'translateX(-80%) scaleX(-1)' : index % 4 === 2 ? 'translateX(-80%) scaleX(-1)' : 'translateX(-20%)' }}>
+                <path d="M 20 0 Q 20 80 100 80 T 180 160" fill="transparent" stroke={isCompleted ? "#fb923c" : "#e5e7eb"} strokeWidth="20" strokeLinecap="round" strokeDasharray="0 30" />
               </svg>
             )}
 
@@ -152,9 +193,9 @@ const LessonPath = ({ onSelectLesson, completedLessons }: { onSelectLesson: (l: 
               whileTap={isNext ? { scale: 0.95 } : {}}
               onClick={() => isNext && onSelectLesson(lesson)}
               className={`
-                relative w-28 h-28 sm:w-32 sm:h-32 rounded-full flex items-center justify-center border-b-8 transition-all
+                relative w-36 h-36 sm:w-40 sm:h-40 rounded-full flex items-center justify-center border-b-[12px] transition-all
                 ${isCompleted ? 'bg-orange-500 border-orange-700 text-white' : 
-                  isNext ? 'bg-purple-500 border-purple-700 text-white shadow-xl ring-4 ring-purple-200 ring-offset-4' : 
+                  isNext ? 'bg-purple-500 border-purple-700 text-white shadow-2xl ring-8 ring-purple-200 ring-offset-4' : 
                   'bg-gray-200 border-gray-300 text-gray-400 cursor-not-allowed'}
               `}
             >
@@ -163,24 +204,24 @@ const LessonPath = ({ onSelectLesson, completedLessons }: { onSelectLesson: (l: 
               {/* Progress Ring for Next Lesson */}
               {isNext && !isCompleted && (
                 <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="8" />
-                  <circle cx="50" cy="50" r="46" fill="none" stroke="#fff" strokeWidth="8" strokeDasharray="289" strokeDashoffset="289" className="animate-[dash_2s_ease-out_forwards]" />
+                  <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="10" />
+                  <circle cx="50" cy="50" r="44" fill="none" stroke="#fff" strokeWidth="10" strokeDasharray="276" strokeDashoffset="276" className="animate-[dash_2s_ease-out_forwards]" />
                 </svg>
               )}
 
               {isCompleted && (
-                <div className="absolute -top-2 -right-2 bg-white rounded-full p-1 border-2 border-orange-500">
-                  <CheckCircle2 className="text-orange-500 w-6 h-6" />
+                <div className="absolute -top-2 -right-2 bg-white rounded-full p-2 border-4 border-orange-500 shadow-sm">
+                  <CheckCircle2 className="text-orange-500 w-8 h-8" />
                 </div>
               )}
               
               {/* Crown for completed */}
               {isCompleted && (
-                <div className="absolute -top-8 text-3xl animate-bounce">👑</div>
+                <div className="absolute -top-10 text-4xl animate-bounce">👑</div>
               )}
             </motion.button>
-            <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 w-48 text-center">
-              <span className={`text-lg font-bold ${isNext ? 'text-gray-800' : 'text-gray-400'}`}>
+            <div className="absolute -bottom-14 left-1/2 -translate-x-1/2 w-64 text-center">
+              <span className={`text-2xl font-black ${isNext ? 'text-gray-900' : 'text-gray-400'}`}>
                 {lesson.title}
               </span>
             </div>
@@ -201,7 +242,7 @@ const LessonView = ({
 }: { 
   lesson: Lesson, 
   hearts: number,
-  onComplete: (points: number, gems: number) => void, 
+  onComplete: (xp: number, gems: number) => void, 
   onWrongAnswer: () => void,
   onCancel: () => void,
   onRefillHearts: () => void
@@ -214,7 +255,6 @@ const LessonView = ({
 
   const step = lesson.steps[currentStepIdx];
 
-  // Auto-read question when step changes
   useEffect(() => {
     if (step && !isFinished) {
       speak(step.content);
@@ -225,19 +265,19 @@ const LessonView = ({
     return (
       <div className="fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center p-6">
         <Mascot mood="shocked" />
-        <h2 className="text-3xl font-black text-gray-800 mt-6 mb-4 text-center">하트가 모두 소진되었어요!</h2>
-        <p className="text-xl text-gray-600 text-center mb-8 font-bold">조금 쉬었다가 다시 도전하거나,<br/>보석을 사용해 하트를 채울 수 있어요.</p>
+        <h2 className="text-4xl font-black text-gray-900 mt-6 mb-6 text-center leading-tight">아이고!<br/>하트가 모두 소진되었어요!</h2>
+        <p className="text-2xl text-gray-700 text-center mb-10 font-bold leading-relaxed">조금 쉬었다가 다시 도전하거나,<br/>보석을 사용해 하트를 채울 수 있어요.</p>
         
-        <div className="w-full max-w-sm space-y-4">
+        <div className="w-full max-w-md space-y-6">
           <button 
             onClick={onRefillHearts}
-            className="w-full py-5 text-2xl font-black rounded-2xl border-b-8 bg-blue-500 border-blue-700 text-white flex items-center justify-center gap-2 active:translate-y-1"
+            className="w-full py-6 text-3xl font-black rounded-2xl border-b-8 bg-blue-500 border-blue-700 text-white flex items-center justify-center gap-3 active:translate-y-2"
           >
-            <Diamond className="w-8 h-8 fill-white" /> 보석 50개로 채우기
+            <Diamond className="w-10 h-10 fill-white" /> 보석 50개로 채우기
           </button>
           <button 
             onClick={onCancel}
-            className="w-full py-5 text-2xl font-black rounded-2xl border-b-8 bg-gray-200 border-gray-300 text-gray-700 active:translate-y-1"
+            className="w-full py-6 text-3xl font-black rounded-2xl border-b-8 bg-gray-200 border-gray-300 text-gray-800 active:translate-y-2"
           >
             나중에 하기
           </button>
@@ -260,32 +300,32 @@ const LessonView = ({
         <motion.h2 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-4xl font-black text-orange-600 mb-8 text-center"
+          className="text-5xl font-black text-orange-600 mb-10 text-center"
         >
           학습 완료!
         </motion.h2>
         
-        <div className="flex gap-4 mb-12">
+        <div className="flex gap-6 mb-16">
           <motion.div 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.3 }}
-            className="bg-yellow-100 border-4 border-yellow-400 p-6 rounded-3xl flex flex-col items-center min-w-[140px]"
+            className="bg-yellow-100 border-4 border-yellow-400 p-8 rounded-3xl flex flex-col items-center min-w-[160px]"
           >
-            <div className="text-yellow-600 font-black text-lg mb-2">획득 점수</div>
-            <div className="flex items-center gap-2 text-3xl font-black text-yellow-700">
-              <Trophy className="w-8 h-8" /> +15
+            <div className="text-yellow-700 font-black text-2xl mb-3">획득 경험치</div>
+            <div className="flex items-center gap-2 text-4xl font-black text-yellow-800">
+              <Trophy className="w-10 h-10" /> +15
             </div>
           </motion.div>
           <motion.div 
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.6 }}
-            className="bg-blue-100 border-4 border-blue-400 p-6 rounded-3xl flex flex-col items-center min-w-[140px]"
+            className="bg-blue-100 border-4 border-blue-400 p-8 rounded-3xl flex flex-col items-center min-w-[160px]"
           >
-            <div className="text-blue-600 font-black text-lg mb-2">획득 보석</div>
-            <div className="flex items-center gap-2 text-3xl font-black text-blue-700">
-              <Diamond className="w-8 h-8 fill-blue-700" /> +10
+            <div className="text-blue-700 font-black text-2xl mb-3">획득 보석</div>
+            <div className="flex items-center gap-2 text-4xl font-black text-blue-800">
+              <Diamond className="w-10 h-10 fill-blue-700" /> +10
             </div>
           </motion.div>
         </div>
@@ -295,7 +335,7 @@ const LessonView = ({
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.9 }}
           onClick={() => onComplete(15, 10)}
-          className="w-full max-w-sm py-5 text-2xl font-black rounded-2xl border-b-8 bg-orange-500 border-orange-700 text-white active:translate-y-1"
+          className="w-full max-w-md py-6 text-3xl font-black rounded-2xl border-b-8 bg-orange-500 border-orange-700 text-white active:translate-y-2"
         >
           계속하기
         </motion.button>
@@ -318,9 +358,9 @@ const LessonView = ({
     setShowFeedback(true);
     
     if (correct) {
-      speak("딩동댕! 정답이에요!");
+      speak("딩동댕! 정답이에요! 정말 잘하셨어요.");
     } else {
-      speak("아쉬워요. 다시 한번 생각해볼까요?");
+      speak("아이고, 아쉬워요. 다시 한번 천천히 생각해볼까요?");
       onWrongAnswer();
     }
   };
@@ -338,54 +378,54 @@ const LessonView = ({
 
   return (
     <div className="fixed inset-0 bg-white z-[100] flex flex-col">
-      <div className="p-4 flex items-center gap-4 border-b-4 border-gray-100">
-        <button onClick={onCancel} className="p-2 hover:bg-gray-100 rounded-full">
-          <XCircle className="w-8 h-8 text-gray-400" />
+      <div className="p-6 flex items-center gap-6 border-b-4 border-gray-200">
+        <button onClick={onCancel} className="p-3 hover:bg-gray-100 rounded-full">
+          <XCircle className="w-10 h-10 text-gray-500" />
         </button>
-        <div className="flex-1 h-5 bg-gray-200 rounded-full overflow-hidden">
+        <div className="flex-1 h-6 bg-gray-200 rounded-full overflow-hidden">
           <motion.div 
             className="h-full bg-green-500"
             initial={{ width: 0 }}
             animate={{ width: `${((currentStepIdx + 1) / lesson.steps.length) * 100}%` }}
           />
         </div>
-        <div className="flex items-center gap-1 text-red-500 font-bold text-xl">
-          <Heart className="w-6 h-6 fill-red-500" /> {hearts}
+        <div className="flex items-center gap-2 text-red-500 font-black text-2xl">
+          <Heart className="w-8 h-8 fill-red-500" /> {hearts}
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center max-w-2xl mx-auto w-full">
+      <div className="flex-1 overflow-y-auto p-8 flex flex-col items-center max-w-3xl mx-auto w-full">
         <Mascot mood={isCorrect === false ? 'sad' : isCorrect === true ? 'celebrating' : 'happy'} />
         
-        <div className="w-full flex items-start gap-4 mb-8 mt-4">
+        <div className="w-full flex items-start gap-4 mb-10 mt-6">
           <button 
             onClick={() => speak(step.content)}
-            className="p-3 bg-blue-100 text-blue-600 rounded-2xl border-b-4 border-blue-200 active:translate-y-1 flex-shrink-0"
+            className="p-4 bg-blue-100 text-blue-700 rounded-2xl border-b-4 border-blue-300 active:translate-y-1 flex-shrink-0"
           >
-            <Volume2 className="w-8 h-8" />
+            <Volume2 className="w-10 h-10" />
           </button>
-          <h2 className="text-3xl font-bold text-gray-800 leading-tight">
+          <h2 className="text-4xl font-black text-gray-900 leading-snug">
             {step.content}
           </h2>
         </div>
 
         {step.imageUrl && (
-          <div className="w-full aspect-video rounded-3xl overflow-hidden border-4 border-gray-100 mb-8 shadow-inner">
+          <div className="w-full aspect-video rounded-3xl overflow-hidden border-4 border-gray-200 mb-10 shadow-md">
             <img src={step.imageUrl} alt="Lesson" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
           </div>
         )}
 
         {step.type === 'quiz' && (
-          <div className="w-full grid gap-4">
+          <div className="w-full grid gap-6">
             {step.options?.map(option => (
               <button
                 key={option}
                 onClick={() => !showFeedback && setSelectedOption(option)}
                 className={`
-                  p-6 text-2xl font-bold rounded-2xl border-4 text-left transition-all
-                  ${selectedOption === option ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:border-gray-300 text-gray-600'}
-                  ${showFeedback && option === step.correctAnswer ? 'border-green-500 bg-green-50 text-green-700' : ''}
-                  ${showFeedback && selectedOption === option && option !== step.correctAnswer ? 'border-red-500 bg-red-50 text-red-700' : ''}
+                  p-8 text-3xl font-black rounded-2xl border-4 text-left transition-all
+                  ${selectedOption === option ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-gray-300 hover:border-gray-400 text-gray-800'}
+                  ${showFeedback && option === step.correctAnswer ? 'border-green-500 bg-green-50 text-green-800' : ''}
+                  ${showFeedback && selectedOption === option && option !== step.correctAnswer ? 'border-red-500 bg-red-50 text-red-800' : ''}
                 `}
               >
                 {option}
@@ -395,35 +435,35 @@ const LessonView = ({
         )}
       </div>
 
-      <div className={`p-6 border-t-4 transition-colors ${showFeedback ? (isCorrect ? 'bg-green-100 border-green-200' : 'bg-red-100 border-red-200') : 'bg-white border-gray-100'}`}>
+      <div className={`p-8 border-t-4 transition-colors ${showFeedback ? (isCorrect ? 'bg-green-100 border-green-300' : 'bg-red-100 border-red-300') : 'bg-white border-gray-200'}`}>
         {showFeedback ? (
-          <div className="flex flex-col gap-4 max-w-2xl mx-auto w-full">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-6 max-w-3xl mx-auto w-full">
+            <div className="flex items-center gap-4">
               {isCorrect ? (
-                <CheckCircle2 className="w-10 h-10 text-green-600" />
+                <CheckCircle2 className="w-12 h-12 text-green-700" />
               ) : (
-                <XCircle className="w-10 h-10 text-red-600" />
+                <XCircle className="w-12 h-12 text-red-700" />
               )}
-              <span className={`text-2xl font-black ${isCorrect ? 'text-green-800' : 'text-red-800'}`}>
+              <span className={`text-3xl font-black ${isCorrect ? 'text-green-900' : 'text-red-900'}`}>
                 {isCorrect ? '참 잘하셨어요!' : '아쉬워요, 다시 해볼까요?'}
               </span>
             </div>
-            {!isCorrect && <p className="text-xl text-red-700 font-bold">{step.hint}</p>}
+            {!isCorrect && <p className="text-2xl text-red-800 font-bold">{step.hint}</p>}
             <button
               onClick={isCorrect ? handleNext : () => setShowFeedback(false)}
-              className={`w-full py-5 text-2xl font-black rounded-2xl border-b-8 text-white transition-transform active:translate-y-1
-                ${isCorrect ? 'bg-green-500 border-green-700' : 'bg-red-500 border-red-700'}`}
+              className={`w-full py-6 text-3xl font-black rounded-2xl border-b-8 text-white transition-transform active:translate-y-2
+                ${isCorrect ? 'bg-green-600 border-green-800' : 'bg-red-600 border-red-800'}`}
             >
               {isCorrect ? '다음으로 넘어가기' : '다시 고르기'}
             </button>
           </div>
         ) : (
-          <div className="max-w-2xl mx-auto w-full">
+          <div className="max-w-3xl mx-auto w-full">
             <button
               disabled={step.type === 'quiz' && !selectedOption}
               onClick={handleCheck}
-              className={`w-full py-5 text-2xl font-black rounded-2xl border-b-8 transition-all active:translate-y-1
-                ${(step.type === 'info' || selectedOption) ? 'bg-green-500 border-green-700 text-white' : 'bg-gray-200 border-gray-300 text-gray-400 cursor-not-allowed'}`}
+              className={`w-full py-6 text-3xl font-black rounded-2xl border-b-8 transition-all active:translate-y-2
+                ${(step.type === 'info' || selectedOption) ? 'bg-green-600 border-green-800 text-white' : 'bg-gray-300 border-gray-400 text-gray-500 cursor-not-allowed'}`}
             >
               {step.type === 'info' ? '이해했어요!' : '정답 확인하기'}
             </button>
@@ -436,37 +476,37 @@ const LessonView = ({
 
 const QuestsView = ({ progress }: { progress: UserProgress }) => {
   return (
-    <div className="pt-24 pb-32 px-6 max-w-2xl mx-auto">
-      <h2 className="text-3xl font-black text-gray-800 mb-6 border-b-4 border-gray-100 pb-4">오늘의 임무</h2>
+    <div className="pt-28 pb-40 px-6 max-w-3xl mx-auto">
+      <h2 className="text-4xl font-black text-gray-900 mb-8 border-b-4 border-gray-200 pb-6">오늘의 임무</h2>
       
-      <div className="space-y-4">
-        <div className="bg-white border-4 border-gray-200 rounded-3xl p-6 flex items-center gap-6">
-          <div className="text-5xl">🔥</div>
+      <div className="space-y-6">
+        <div className="bg-white border-4 border-gray-200 rounded-3xl p-8 flex items-center gap-8 shadow-sm">
+          <div className="text-6xl">🔥</div>
           <div className="flex-1">
-            <h3 className="text-xl font-bold text-gray-800 mb-2">출석하기</h3>
-            <div className="w-full bg-gray-200 rounded-full h-4 mb-2">
-              <div className="bg-orange-500 h-4 rounded-full w-full"></div>
+            <h3 className="text-2xl font-black text-gray-900 mb-3">출석하기</h3>
+            <div className="w-full bg-gray-200 rounded-full h-6 mb-3">
+              <div className="bg-orange-500 h-6 rounded-full w-full"></div>
             </div>
-            <div className="flex justify-between text-gray-500 font-bold">
+            <div className="flex justify-between text-gray-600 font-bold text-xl">
               <span>1 / 1</span>
-              <span className="text-orange-500">완료!</span>
+              <span className="text-orange-600 font-black">완료!</span>
             </div>
           </div>
         </div>
 
-        <div className="bg-white border-4 border-gray-200 rounded-3xl p-6 flex items-center gap-6">
-          <div className="text-5xl">📱</div>
+        <div className="bg-white border-4 border-gray-200 rounded-3xl p-8 flex items-center gap-8 shadow-sm">
+          <div className="text-6xl">📱</div>
           <div className="flex-1">
-            <h3 className="text-xl font-bold text-gray-800 mb-2">학습 1회 완료하기</h3>
-            <div className="w-full bg-gray-200 rounded-full h-4 mb-2">
-              <div className="bg-blue-500 h-4 rounded-full" style={{ width: progress.completedLessons.length > 0 ? '100%' : '0%' }}></div>
+            <h3 className="text-2xl font-black text-gray-900 mb-3">학습 1회 완료하기</h3>
+            <div className="w-full bg-gray-200 rounded-full h-6 mb-3">
+              <div className="bg-blue-500 h-6 rounded-full" style={{ width: progress.completedLessons.length > 0 ? '100%' : '0%' }}></div>
             </div>
-            <div className="flex justify-between text-gray-500 font-bold">
+            <div className="flex justify-between text-gray-600 font-bold text-xl">
               <span>{progress.completedLessons.length > 0 ? '1' : '0'} / 1</span>
               {progress.completedLessons.length > 0 ? (
-                <span className="text-blue-500">완료!</span>
+                <span className="text-blue-600 font-black">완료!</span>
               ) : (
-                <span className="text-blue-500 flex items-center gap-1"><Diamond className="w-4 h-4 fill-blue-500"/> 10</span>
+                <span className="text-blue-600 font-black flex items-center gap-2"><Diamond className="w-6 h-6 fill-blue-600"/> 10</span>
               )}
             </div>
           </div>
@@ -476,46 +516,78 @@ const QuestsView = ({ progress }: { progress: UserProgress }) => {
   );
 };
 
-const LeaderboardView = ({ progress }: { progress: UserProgress }) => {
-  const mockUsers = [
-    { name: '김영희', points: 1500, avatar: '👵' },
-    { name: '이철수', points: 1200, avatar: '👴' },
-    { name: '나 (회원님)', points: progress.points, avatar: '😊', isMe: true },
-    { name: '박지민', points: 900, avatar: '👩‍🦳' },
-    { name: '최동훈', points: 850, avatar: '👨‍🦳' },
-  ].sort((a, b) => b.points - a.points);
+const LeaderboardView = ({ progress, user }: { progress: UserProgress, user: FirebaseUser }) => {
+  const [leaderboard, setLeaderboard] = useState<{ name: string, xp: number, avatar: string, isMe: boolean }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchLeaderboard = async () => {
+      try {
+        const q = query(collection(db, 'users'), orderBy('xp', 'desc'), limit(10));
+        const querySnapshot = await getDocs(q);
+        const users: { name: string, xp: number, avatar: string, isMe: boolean }[] = [];
+        
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          users.push({
+            name: data.displayName || '익명 사용자',
+            xp: data.xp || 0,
+            avatar: data.photoURL || '👵',
+            isMe: doc.id === user.uid
+          });
+        });
+        
+        // If current user is not in top 10, we could add them at the bottom, but for now just show top 10.
+        setLeaderboard(users);
+      } catch (error) {
+        console.error("Error fetching leaderboard:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLeaderboard();
+  }, [user.uid]);
 
   return (
-    <div className="pt-24 pb-32 px-6 max-w-2xl mx-auto">
-      <div className="bg-gradient-to-r from-yellow-400 to-orange-500 rounded-3xl p-8 text-white text-center mb-8 shadow-lg">
-        <Medal className="w-16 h-16 mx-auto mb-4" />
-        <h2 className="text-3xl font-black mb-2">명예의 전당</h2>
-        <p className="text-lg font-bold opacity-90">이번 주 금빛 리그 순위입니다!</p>
+    <div className="pt-28 pb-40 px-6 max-w-3xl mx-auto">
+      <div className="bg-gradient-to-r from-yellow-400 to-orange-500 rounded-3xl p-10 text-white text-center mb-10 shadow-lg">
+        <Medal className="w-20 h-20 mx-auto mb-6" />
+        <h2 className="text-4xl font-black mb-4">명예의 전당</h2>
+        <p className="text-2xl font-bold opacity-90">이번 주 금빛 리그 순위입니다!</p>
       </div>
 
-      <div className="bg-white border-4 border-gray-100 rounded-3xl overflow-hidden">
-        {mockUsers.map((user, index) => (
-          <div 
-            key={user.name} 
-            className={`flex items-center gap-4 p-6 border-b-4 border-gray-50 last:border-0
-              ${user.isMe ? 'bg-orange-50' : ''}`}
-          >
-            <div className={`text-2xl font-black w-8 text-center
-              ${index === 0 ? 'text-yellow-500' : index === 1 ? 'text-gray-400' : index === 2 ? 'text-amber-600' : 'text-gray-400'}`}
+      <div className="bg-white border-4 border-gray-200 rounded-3xl overflow-hidden shadow-sm">
+        {loading ? (
+          <div className="p-8 text-center text-2xl font-bold text-gray-500">순위를 불러오는 중입니다...</div>
+        ) : leaderboard.length === 0 ? (
+          <div className="p-8 text-center text-2xl font-bold text-gray-500">아직 순위가 없습니다.</div>
+        ) : (
+          leaderboard.map((u, index) => (
+            <div 
+              key={index} 
+              className={`flex items-center gap-6 p-8 border-b-4 border-gray-100 last:border-0
+                ${u.isMe ? 'bg-orange-50' : ''}`}
             >
-              {index + 1}
-            </div>
-            <div className="text-4xl bg-gray-100 rounded-full p-2">{user.avatar}</div>
-            <div className="flex-1">
-              <div className={`text-xl font-bold ${user.isMe ? 'text-orange-700' : 'text-gray-800'}`}>
-                {user.name}
+              <div className={`text-3xl font-black w-10 text-center
+                ${index === 0 ? 'text-yellow-500' : index === 1 ? 'text-gray-400' : index === 2 ? 'text-amber-600' : 'text-gray-400'}`}
+              >
+                {index + 1}
+              </div>
+              <div className="w-16 h-16 bg-gray-100 rounded-full overflow-hidden flex items-center justify-center text-4xl border-2 border-gray-200">
+                {u.avatar.startsWith('http') ? <img src={u.avatar} alt="avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : u.avatar}
+              </div>
+              <div className="flex-1">
+                <div className={`text-2xl font-black ${u.isMe ? 'text-orange-800' : 'text-gray-900'}`}>
+                  {u.name}
+                </div>
+              </div>
+              <div className="text-2xl font-black text-gray-700">
+                {u.xp} XP
               </div>
             </div>
-            <div className="text-xl font-black text-gray-600">
-              {user.points}점
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
@@ -548,11 +620,11 @@ const AITutor = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) 
         config: { systemInstruction: SYSTEM_INSTRUCTION }
       });
       
-      const aiText = response.text || "죄송해요, 다시 말씀해주시겠어요?";
+      const aiText = response.text || "아이고, 제가 잘 못 들었어요. 다시 말씀해주시겠어요?";
       setMessages(prev => [...prev, { role: 'ai', text: aiText }]);
-      speak(aiText); // Read AI response out loud
+      speak(aiText);
     } catch (error) {
-      setMessages(prev => [...prev, { role: 'ai', text: "연결이 조금 불안정해요. 잠시 후 다시 물어봐주세요!" }]);
+      setMessages(prev => [...prev, { role: 'ai', text: "연결이 조금 불안정하네요. 잠시 후 다시 물어봐주세요!" }]);
     } finally {
       setIsLoading(false);
     }
@@ -567,58 +639,58 @@ const AITutor = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) 
           exit={{ y: '100%' }}
           className="fixed inset-0 bg-white z-[200] flex flex-col"
         >
-          <div className="p-4 border-b-4 border-orange-100 flex justify-between items-center bg-orange-50">
-            <div className="flex items-center gap-3">
-              <div className="bg-white p-2 rounded-full border-2 border-orange-400">🦉</div>
-              <h3 className="text-xl font-bold text-orange-900">은빛 부엉이 도우미</h3>
+          <div className="p-6 border-b-4 border-orange-200 flex justify-between items-center bg-orange-50">
+            <div className="flex items-center gap-4">
+              <div className="bg-white p-3 rounded-full border-2 border-orange-400 text-3xl">👩‍🏫</div>
+              <h3 className="text-3xl font-black text-orange-900">다온 선생님</h3>
             </div>
-            <button onClick={onClose} className="p-2 hover:bg-orange-100 rounded-full">
-              <XCircle className="w-8 h-8 text-orange-800" />
+            <button onClick={onClose} className="p-3 hover:bg-orange-100 rounded-full">
+              <XCircle className="w-10 h-10 text-orange-800" />
             </button>
           </div>
 
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 bg-orange-50/30">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-8 space-y-8 bg-orange-50/30">
             {messages.length === 0 && (
-              <div className="text-center py-12">
-                <div className="text-6xl mb-4">🦉</div>
-                <h4 className="text-2xl font-bold text-gray-800 mb-2">무엇이든 물어보세요!</h4>
-                <p className="text-gray-500 text-lg font-bold">"카카오톡이 뭐야?", "사진은 어떻게 찍어?"</p>
+              <div className="text-center py-16">
+                <div className="text-8xl mb-6">👩‍🏫</div>
+                <h4 className="text-3xl font-black text-gray-900 mb-4">무엇이든 물어보세요!</h4>
+                <p className="text-gray-700 text-2xl font-bold">"카카오톡이 뭐야?", "사진은 어떻게 찍어?"</p>
               </div>
             )}
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] p-5 rounded-3xl text-xl font-medium shadow-sm border-2
-                  ${m.role === 'user' ? 'bg-orange-500 text-white border-orange-600 rounded-tr-none' : 'bg-white text-gray-800 border-gray-100 rounded-tl-none'}`}>
+                <div className={`max-w-[85%] p-6 rounded-[2rem] text-2xl font-bold shadow-sm border-4 leading-relaxed
+                  ${m.role === 'user' ? 'bg-orange-500 text-white border-orange-600 rounded-tr-none' : 'bg-white text-gray-900 border-gray-200 rounded-tl-none'}`}>
                   <Markdown>{m.text}</Markdown>
                 </div>
               </div>
             ))}
             {isLoading && (
               <div className="flex justify-start">
-                <div className="bg-white p-5 rounded-3xl border-2 border-gray-100 rounded-tl-none flex gap-2">
-                  <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="w-2 h-2 bg-orange-400 rounded-full" />
-                  <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ repeat: Infinity, duration: 1, delay: 0.2 }} className="w-2 h-2 bg-orange-400 rounded-full" />
-                  <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ repeat: Infinity, duration: 1, delay: 0.4 }} className="w-2 h-2 bg-orange-400 rounded-full" />
+                <div className="bg-white p-6 rounded-[2rem] border-4 border-gray-200 rounded-tl-none flex gap-3">
+                  <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="w-3 h-3 bg-orange-400 rounded-full" />
+                  <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ repeat: Infinity, duration: 1, delay: 0.2 }} className="w-3 h-3 bg-orange-400 rounded-full" />
+                  <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ repeat: Infinity, duration: 1, delay: 0.4 }} className="w-3 h-3 bg-orange-400 rounded-full" />
                 </div>
               </div>
             )}
           </div>
 
-          <div className="p-6 bg-white border-t-4 border-orange-100">
-            <div className="flex gap-3">
+          <div className="p-6 bg-white border-t-4 border-orange-200">
+            <div className="flex gap-4">
               <input 
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSend()}
                 placeholder="여기에 궁금한 걸 써보세요..."
-                className="flex-1 p-5 text-xl bg-gray-50 border-4 border-gray-100 rounded-2xl focus:border-orange-400 outline-none"
+                className="flex-1 p-6 text-2xl font-bold bg-gray-50 border-4 border-gray-200 rounded-2xl focus:border-orange-500 outline-none"
               />
               <button 
                 onClick={handleSend}
-                className="bg-orange-500 p-5 rounded-2xl border-b-8 border-orange-700 text-white active:translate-y-1"
+                className="bg-orange-500 p-6 rounded-2xl border-b-8 border-orange-700 text-white active:translate-y-2"
               >
-                <Send className="w-8 h-8" />
+                <Send className="w-10 h-10" />
               </button>
             </div>
           </div>
@@ -629,55 +701,157 @@ const AITutor = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) 
 };
 
 export default function App() {
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
+  const [progress, setProgress] = useState<UserProgress | null>(null);
+
   const [view, setView] = useState<'home' | 'quests' | 'leaderboard' | 'profile'>('home');
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [isAIHelpOpen, setIsAIHelpOpen] = useState(false);
-  const [progress, setProgress] = useState<UserProgress>(() => {
-    const saved = localStorage.getItem('silverlink_progress');
-    const parsed = saved ? JSON.parse(saved) : {};
-    return {
-      completedLessons: parsed.completedLessons || [],
-      currentStreak: parsed.currentStreak || 0,
-      points: parsed.points || 0,
-      hearts: parsed.hearts !== undefined ? parsed.hearts : 5,
-      gems: parsed.gems !== undefined ? parsed.gems : 100,
-      lastActive: parsed.lastActive || new Date().toISOString()
-    };
-  });
+  const [showDailyReward, setShowDailyReward] = useState(false);
 
+  // Auth Listener
   useEffect(() => {
-    localStorage.setItem('silverlink_progress', JSON.stringify(progress));
-  }, [progress]);
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoadingAuth(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
-  const handleLessonComplete = (pointsEarned: number, gemsEarned: number) => {
-    if (!selectedLesson) return;
+  // Firestore Sync
+  useEffect(() => {
+    if (!user) {
+      setProgress(null);
+      return;
+    }
+
+    const userRef = doc(db, 'users', user.uid);
+    const unsubscribe = onSnapshot(userRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data() as UserProgress;
+        setProgress(data);
+        
+        // Check Daily Reward
+        const today = getTodayString();
+        if (data.lastActiveDate !== today) {
+          setShowDailyReward(true);
+        }
+      } else {
+        // Create new user profile
+        const newProgress: UserProgress = {
+          completedLessons: [],
+          currentStreak: 0,
+          xp: 0,
+          hearts: 5,
+          gems: 100,
+          lastActiveDate: ''
+        };
+        setDoc(userRef, {
+          ...newProgress,
+          uid: user.uid,
+          displayName: user.displayName,
+          photoURL: user.photoURL
+        });
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error("Login failed", error);
+    }
+  };
+
+  const handleLogout = async () => {
+    await signOut(auth);
+  };
+
+  const updateProgress = async (updates: Partial<UserProgress>) => {
+    if (!user || !progress) return;
+    const userRef = doc(db, 'users', user.uid);
+    await updateDoc(userRef, updates);
+  };
+
+  const handleClaimDailyReward = () => {
+    if (!progress) return;
+    const today = getTodayString();
     
-    setProgress(prev => {
-      const isFirstTime = !prev.completedLessons.includes(selectedLesson.id);
-      return {
-        ...prev,
-        completedLessons: isFirstTime ? [...prev.completedLessons, selectedLesson.id] : prev.completedLessons,
-        points: prev.points + pointsEarned,
-        gems: prev.gems + gemsEarned,
-        currentStreak: prev.currentStreak === 0 ? 1 : prev.currentStreak, 
-        lastActive: new Date().toISOString()
-      };
+    const newStreak = progress.currentStreak + 1; 
+    updateProgress({
+      currentStreak: newStreak,
+      gems: progress.gems + 20,
+      xp: progress.xp + 10,
+      lastActiveDate: today
+    });
+    
+    setShowDailyReward(false);
+    speak("오늘도 오셨군요! 참 잘하셨어요. 보석을 드릴게요.");
+  };
+
+  const handleLessonComplete = (xpEarned: number, gemsEarned: number) => {
+    if (!selectedLesson || !progress) return;
+    
+    const isFirstTime = !progress.completedLessons.includes(selectedLesson.id);
+    updateProgress({
+      completedLessons: isFirstTime ? [...progress.completedLessons, selectedLesson.id] : progress.completedLessons,
+      xp: progress.xp + xpEarned,
+      gems: progress.gems + gemsEarned,
     });
     setSelectedLesson(null);
   };
 
   const handleRefillHearts = () => {
+    if (!progress) return;
     if (progress.gems >= 50) {
-      setProgress(prev => ({ ...prev, hearts: 5, gems: prev.gems - 50 }));
+      updateProgress({ hearts: 5, gems: progress.gems - 50 });
     } else {
       alert("보석이 부족해요!");
     }
   };
 
+  if (loadingAuth) {
+    return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-3xl font-black text-orange-500 animate-pulse">다온 불러오는 중...</div></div>;
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-orange-50 flex flex-col items-center justify-center p-6">
+        <Mascot />
+        <h1 className="text-5xl font-black text-orange-600 mb-4 mt-6">다온</h1>
+        <p className="text-2xl text-gray-700 font-bold mb-12 text-center">어르신을 위한<br/>가장 쉬운 디지털 교실</p>
+        
+        <button 
+          onClick={handleLogin}
+          className="w-full max-w-sm py-6 text-3xl font-black rounded-2xl border-b-8 bg-white border-gray-300 text-gray-800 flex items-center justify-center gap-4 active:translate-y-2 shadow-sm"
+        >
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-8 h-8" />
+          구글로 시작하기
+        </button>
+      </div>
+    );
+  }
+
+  if (!progress) {
+    return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-3xl font-black text-orange-500 animate-pulse">정보 불러오는 중...</div></div>;
+  }
+
   return (
-    <div className="min-h-screen bg-white font-sans text-gray-900 selection:bg-orange-200">
-      <Header progress={progress} />
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 selection:bg-orange-200">
+      <Header progress={progress} user={user} />
       
+      {showDailyReward && (
+        <DailyRewardModal 
+          onClaim={handleClaimDailyReward} 
+          streak={progress.currentStreak + 1} 
+          gems={20} 
+        />
+      )}
+
       <main className="max-w-4xl mx-auto">
         {view === 'home' && !selectedLesson && (
           <LessonPath 
@@ -691,7 +865,7 @@ export default function App() {
             lesson={selectedLesson} 
             hearts={progress.hearts}
             onComplete={handleLessonComplete}
-            onWrongAnswer={() => setProgress(prev => ({ ...prev, hearts: Math.max(0, prev.hearts - 1) }))}
+            onWrongAnswer={() => updateProgress({ hearts: Math.max(0, progress.hearts - 1) })}
             onCancel={() => setSelectedLesson(null)}
             onRefillHearts={handleRefillHearts}
           />
@@ -702,82 +876,91 @@ export default function App() {
         )}
 
         {view === 'leaderboard' && !selectedLesson && (
-          <LeaderboardView progress={progress} />
+          <LeaderboardView progress={progress} user={user} />
         )}
 
         {view === 'profile' && !selectedLesson && (
-          <div className="pt-24 px-6 flex flex-col items-center">
-             <div className="w-32 h-32 bg-orange-100 rounded-full flex items-center justify-center border-4 border-orange-400 text-6xl mb-4">
-               👴
+          <div className="pt-28 px-6 flex flex-col items-center">
+             <div className="w-40 h-40 bg-orange-100 rounded-full flex items-center justify-center border-8 border-orange-400 text-7xl mb-6 shadow-md overflow-hidden">
+               {user.photoURL ? <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : '👴'}
              </div>
-             <h2 className="text-3xl font-bold mb-8">나의 배움 기록</h2>
-             <div className="grid grid-cols-2 gap-4 w-full max-w-md">
-               <div className="bg-blue-50 p-6 rounded-3xl border-4 border-blue-100 text-center">
-                 <Trophy className="w-10 h-10 text-blue-500 mx-auto mb-2" />
-                 <div className="text-2xl font-black text-blue-800">{progress.points}점</div>
-                 <div className="text-blue-600 font-bold">총 점수</div>
+             <h2 className="text-4xl font-black text-gray-900 mb-2">{user.displayName || '회원님'}</h2>
+             <p className="text-xl text-gray-500 font-bold mb-10">{user.email}</p>
+
+             <div className="grid grid-cols-2 gap-6 w-full max-w-2xl mb-12">
+               <div className="bg-blue-50 p-8 rounded-[2rem] border-4 border-blue-200 text-center shadow-sm">
+                 <Trophy className="w-12 h-12 text-blue-600 mx-auto mb-3" />
+                 <div className="text-4xl font-black text-blue-900 mb-1">{progress.xp}</div>
+                 <div className="text-blue-700 font-bold text-xl">경험치 (XP)</div>
                </div>
-               <div className="bg-red-50 p-6 rounded-3xl border-4 border-red-100 text-center">
-                 <div className="text-4xl mb-2">🔥</div>
-                 <div className="text-2xl font-black text-red-800">{progress.currentStreak}일</div>
-                 <div className="text-red-600 font-bold">연속 학습</div>
+               <div className="bg-red-50 p-8 rounded-[2rem] border-4 border-red-200 text-center shadow-sm">
+                 <div className="text-5xl mb-3">🔥</div>
+                 <div className="text-4xl font-black text-red-900 mb-1">{progress.currentStreak}일</div>
+                 <div className="text-red-700 font-bold text-xl">연속 학습</div>
                </div>
-               <div className="bg-pink-50 p-6 rounded-3xl border-4 border-pink-100 text-center">
-                 <Heart className="w-10 h-10 text-pink-500 fill-pink-500 mx-auto mb-2" />
-                 <div className="text-2xl font-black text-pink-800">{progress.hearts}개</div>
-                 <div className="text-pink-600 font-bold">남은 하트</div>
+               <div className="bg-pink-50 p-8 rounded-[2rem] border-4 border-pink-200 text-center shadow-sm">
+                 <Heart className="w-12 h-12 text-pink-500 fill-pink-500 mx-auto mb-3" />
+                 <div className="text-4xl font-black text-pink-900 mb-1">{progress.hearts}개</div>
+                 <div className="text-pink-700 font-bold text-xl">남은 하트</div>
                </div>
-               <div className="bg-purple-50 p-6 rounded-3xl border-4 border-purple-100 text-center">
-                 <Diamond className="w-10 h-10 text-purple-500 fill-purple-500 mx-auto mb-2" />
-                 <div className="text-2xl font-black text-purple-800">{progress.gems}개</div>
-                 <div className="text-purple-600 font-bold">보유 보석</div>
+               <div className="bg-purple-50 p-8 rounded-[2rem] border-4 border-purple-200 text-center shadow-sm">
+                 <Diamond className="w-12 h-12 text-purple-500 fill-purple-500 mx-auto mb-3" />
+                 <div className="text-4xl font-black text-purple-900 mb-1">{progress.gems}개</div>
+                 <div className="text-purple-700 font-bold text-xl">보유 보석</div>
                </div>
              </div>
+
+             <button 
+                onClick={handleLogout}
+                className="flex items-center gap-3 text-2xl font-bold text-gray-500 hover:text-gray-800 bg-gray-200 px-8 py-4 rounded-2xl"
+             >
+               <LogOut className="w-8 h-8" /> 로그아웃
+             </button>
           </div>
         )}
       </main>
 
       {/* Bottom Navigation */}
       {!selectedLesson && (
-        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t-4 border-gray-100 p-2 sm:p-4 flex justify-around items-center z-50">
+        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t-4 border-gray-200 p-3 sm:p-5 flex justify-around items-center z-50 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)]">
           <button 
             onClick={() => setView('home')}
-            className={`flex flex-col items-center gap-1 p-2 rounded-2xl ${view === 'home' ? 'text-orange-500 bg-orange-50' : 'text-gray-400 hover:bg-gray-50'}`}
+            className={`flex flex-col items-center gap-2 p-3 rounded-2xl transition-colors ${view === 'home' ? 'text-orange-600 bg-orange-50' : 'text-gray-400 hover:bg-gray-50'}`}
           >
-            <Home className="w-8 h-8" />
-            <span className="text-xs font-bold hidden sm:block">학습</span>
+            <Home className="w-10 h-10" />
+            <span className="text-sm font-black hidden sm:block">학습</span>
           </button>
 
           <button 
             onClick={() => setView('quests')}
-            className={`flex flex-col items-center gap-1 p-2 rounded-2xl ${view === 'quests' ? 'text-blue-500 bg-blue-50' : 'text-gray-400 hover:bg-gray-50'}`}
+            className={`flex flex-col items-center gap-2 p-3 rounded-2xl transition-colors ${view === 'quests' ? 'text-blue-600 bg-blue-50' : 'text-gray-400 hover:bg-gray-50'}`}
           >
-            <Target className="w-8 h-8" />
-            <span className="text-xs font-bold hidden sm:block">임무</span>
+            <Target className="w-10 h-10" />
+            <span className="text-sm font-black hidden sm:block">임무</span>
           </button>
           
           <button 
             onClick={() => setIsAIHelpOpen(true)}
-            className="relative -top-6 bg-orange-500 p-4 rounded-full border-b-8 border-orange-700 shadow-xl text-white active:translate-y-1"
+            className="relative -top-8 bg-orange-500 p-5 rounded-full border-b-8 border-orange-700 shadow-2xl text-white active:translate-y-2 transition-transform"
           >
-            <Sparkles className="w-8 h-8" />
-            <div className="absolute -top-2 -right-2 bg-yellow-400 text-orange-900 text-[10px] font-black px-2 py-1 rounded-full border-2 border-white">도움!</div>
+            <Sparkles className="w-10 h-10" />
+            <div className="absolute -top-3 -right-3 bg-yellow-400 text-orange-900 text-xs font-black px-3 py-1.5 rounded-full border-4 border-white shadow-sm">질문!</div>
           </button>
 
           <button 
             onClick={() => setView('leaderboard')}
-            className={`flex flex-col items-center gap-1 p-2 rounded-2xl ${view === 'leaderboard' ? 'text-yellow-600 bg-yellow-50' : 'text-gray-400 hover:bg-gray-50'}`}
+            className={`flex flex-col items-center gap-2 p-3 rounded-2xl transition-colors ${view === 'leaderboard' ? 'text-yellow-600 bg-yellow-50' : 'text-gray-400 hover:bg-gray-50'}`}
           >
-            <Medal className="w-8 h-8" />
-            <span className="text-xs font-bold hidden sm:block">순위</span>
+            <Medal className="w-10 h-10" />
+            <span className="text-sm font-black hidden sm:block">순위</span>
           </button>
 
           <button 
             onClick={() => setView('profile')}
-            className={`flex flex-col items-center gap-1 p-2 rounded-2xl ${view === 'profile' ? 'text-orange-500 bg-orange-50' : 'text-gray-400 hover:bg-gray-50'}`}
+            className={`flex flex-col items-center gap-2 p-3 rounded-2xl transition-colors ${view === 'profile' ? 'text-orange-600 bg-orange-50' : 'text-gray-400 hover:bg-gray-50'}`}
           >
-            <User className="w-8 h-8" />
-            <span className="text-xs font-bold hidden sm:block">내 정보</span>
+            <User className="w-10 h-10" />
+            <span className="text-sm font-black hidden sm:block">내 정보</span>
           </button>
         </nav>
       )}
